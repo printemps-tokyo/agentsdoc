@@ -160,7 +160,7 @@ fn quiet_prints_only_the_summary_line() {
     assert_eq!(text.lines().count(), 1);
     assert!(text.contains("grade "));
     // The caveat still shows, on stderr, so it cannot pollute a pipeline.
-    let err = String::from_utf8(out.stderr.clone()).unwrap();
+    let err = String::from_utf8(out.stderr).unwrap();
     assert!(err.contains("Agent loading behavior changes fast"));
 }
 
