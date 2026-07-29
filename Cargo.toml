@@ -1,0 +1,37 @@
+[package]
+name = "agentsdoc"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+description = "Audit a repository's AI coding agent instruction files (AGENTS.md, CLAUDE.md, .cursorrules, copilot-instructions.md) for consistency and cross-tool portability. Offline Rust CLI."
+authors = ["printemps.tokyo <develop@printemps.tokyo>"]
+repository = "https://github.com/printemps-tokyo/agentsdoc"
+homepage = "https://github.com/printemps-tokyo/agentsdoc"
+readme = "README.md"
+keywords = ["agents-md", "claude", "copilot", "cursor", "cli"]
+categories = ["command-line-utilities", "development-tools"]
+
+[[bin]]
+name = "agentsdoc"
+path = "src/main.rs"
+
+[lib]
+name = "agentsdoc"
+path = "src/lib.rs"
+
+[dependencies]
+# Error context for the thin binary layer (org convention).
+anyhow = "1"
+# Argument parsing (derive API, org convention).
+clap = { version = "4", features = ["derive"] }
+# gitignore-aware directory walk, same crate repotome and readyproof use.
+ignore = "0.4"
+
+[dev-dependencies]
+tempfile = "3"
+
+[profile.release]
+strip = true
+lto = true
+codegen-units = 1
+panic = "abort"
