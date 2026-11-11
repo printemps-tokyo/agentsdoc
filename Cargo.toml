@@ -2,6 +2,7 @@
 name = "agentsdoc"
 version = "0.1.0"
 edition = "2021"
+rust-version = "1.88"
 license = "MIT"
 description = "Audit a repository's AI coding agent instruction files (AGENTS.md, CLAUDE.md, .cursorrules, copilot-instructions.md) for consistency and cross-tool portability. Offline Rust CLI."
 authors = ["printemps.tokyo <develop@printemps.tokyo>"]
