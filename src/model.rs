@@ -236,13 +236,13 @@ pub struct Report {
     pub skipped: usize,
 }
 
-/// The date on which every cited tool behavior in this build was read from its
-/// official documentation.
-pub const SOURCES_READ: &str = "2026-07-29";
+/// The most recent date on which a cited tool behavior in this build was read
+/// from its official documentation. Each source also carries its own date.
+pub const SOURCES_READ: &str = "2026-11-12";
 
 /// The framing that must accompany every report, in both output modes.
 pub const CAVEAT: &str = "Agent loading behavior changes fast. agentsdoc encodes what the cited \
-official docs said on 2026-07-29; verify against your tool's current documentation before acting \
+official docs said on the date shown with each source (most recently 2026-11-12); verify against your tool's current documentation before acting \
 on a finding. Behaviors agentsdoc could not confirm from an official doc are reported as INFO and \
 labeled unverified, never as FAIL.";
 

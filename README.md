@@ -123,6 +123,8 @@ agentsdoc . --skip portability-gemini-cli
 | `--tokens <N>` | Per-file estimated-token budget for `content-size`. Default `4000` |
 | `--only <CATEGORY>` | Run only `discovery`, `portability`, `consistency` or `content`. Repeatable |
 | `--skip <CHECK_ID>` | Skip one check by id. Repeatable |
+| `--fix` | Make the root `AGENTS.md` the single source (see below), then audit the result |
+| `--dry-run` | With `--fix`: print what would change and change nothing |
 | `--no-color` | Never emit ANSI color codes |
 | `--quiet` / `-q` | Print only the one-line summary (the caveat goes to stderr) |
 | `--help`, `--version` | |
@@ -136,8 +138,9 @@ a terminal. JSON output is never colored.
 
 This is the most important caveat in this README, so it is not in a footnote.
 
-agentsdoc encodes what a specific set of official documents said on
-**2026-07-29**. Coding agents ship weekly. A behavior that is true today may not
+agentsdoc encodes what a specific set of official documents said on the date
+each was read (**2026-07-29**, and **2026-11-12** for Windsurf, Cline and
+Kiro). Coding agents ship weekly. A behavior that is true today may not
 be true when you read this.
 
 Three rules the tool follows so that it stays honest about this:
@@ -161,8 +164,8 @@ is right. Please [open an issue](../../issues) so the citation can be updated.
 
 ## Sources
 
-Every behavioral claim in agentsdoc comes from one of these, all read on
-2026-07-29:
+Every behavioral claim in agentsdoc comes from one of these, read on 2026-07-29
+unless the row says otherwise:
 
 | Source | What it establishes |
 | --- | --- |
@@ -172,9 +175,12 @@ Every behavioral claim in agentsdoc comes from one of these, all read on
 | [docs.github.com -- add repository instructions](https://docs.github.com/en/copilot/how-tos/configure-custom-instructions/add-repository-instructions) | Copilot repository instructions live at `.github/copilot-instructions.md`; `.github/instructions/*.instructions.md` with `applyTo` frontmatter; `AGENTS.md` supported anywhere with nearest-file precedence; root `CLAUDE.md` or `GEMINI.md` as alternatives |
 | [gemini-cli docs -- GEMINI.md](https://google-gemini.github.io/gemini-cli/docs/cli/gemini-md.html) | `GEMINI.md` is the default context file name; `context.fileName` in `settings.json` can change it (the doc's own example includes `AGENTS.md`); hierarchical loading from `~/.gemini/`, the project tree and subdirectories; `@file.md` imports |
 | [aider.chat -- conventions](https://aider.chat/docs/usage/conventions.html) | aider loads no conventions file automatically; a file must be named with `--read`, `/read`, or a `read:` key in `.aider.conf.yml` |
+| [docs.devin.ai -- Devin Local customizations](https://docs.devin.ai/desktop/devin-local/customizations) (read 2026-11-12; `docs.windsurf.com/windsurf/cascade/memories` redirects here) | Windsurf reads `AGENTS.md`, `AGENTS.local.md` and `AGENT.md` as always-on rules at the root and in each directory down to the working one; rule files in `.devin/rules/*.md` with `trigger` frontmatter (`always_on`, `glob`, `model_decision`, `manual`); `.devin/global_rules.md`; the legacy `.windsurf/rules/*.md`, `.windsurf/global_rules.md` and `.windsurfrules` are imported by default, and `.devin/global_rules.md` wins when both global files exist |
+| [docs.cline.bot -- Cline rules](https://docs.cline.bot/customization/cline-rules) (read 2026-11-12) | Workspace rules in `.clinerules/` or `.cline/rules/` at the project root; `.cursorrules`, `.windsurfrules` and `AGENTS.md` are detected too; every rule can be toggled in the Rules panel |
+| [kiro.dev -- steering](https://kiro.dev/docs/steering/) (read 2026-11-12) | Workspace steering in `.kiro/steering/`, with `inclusion: always` as the default and `fileMatch` / `manual` modes; `AGENTS.md` at the workspace root is always included and is also discovered in subdirectories |
 
-Windsurf is listed in the agent table but marked **unverified**: no official
-document could be cited for it on 2026-07-29, so its check never exceeds INFO.
+Windsurf was marked unverified until 2026-11-12, when its documentation (now
+under docs.devin.ai) could be cited.
 
 ---
 
@@ -198,8 +204,12 @@ visible to the audit.
 | `copilot-instructions` | `.github/copilot-instructions.md` |
 | `copilot-path-instructions` | `.github/instructions/**/*.instructions.md` |
 | `gemini-md` | `GEMINI.md` |
-| `windsurf-rules` | `.windsurfrules`, `.windsurf/rules/**/*.md` |
-| `cline-rules` | `.clinerules`, `.clinerules/**/*.md` |
+| `agents-local-md` | `AGENTS.local.md` |
+| `agent-md` | `AGENT.md` (singular) |
+| `windsurf-rules` | `.windsurfrules`, `.windsurf/global_rules.md`, `.windsurf/rules/**/*.md` |
+| `devin-rules` | `.devin/global_rules.md`, `.devin/rules/**/*.md` |
+| `cline-rules` | `.clinerules`, `.clinerules/**/*.md`, `.cline/rules/**/*.md` |
+| `kiro-steering` | `.kiro/steering/**/*.md` |
 | `aider-config` | `.aider.conf.yml` / `.yaml` |
 | `aider-conventions` | root `CONVENTIONS.md` |
 
@@ -221,7 +231,7 @@ can bill against.
 
 ## Check catalog
 
-16 checks in four categories. Each produces exactly one finding, so the catalog
+18 checks in four categories. Each produces exactly one finding, so the catalog
 below is exactly what the tool emits, and every id is a valid `--skip` value.
 
 ### discovery
@@ -238,7 +248,8 @@ both perfectly ordinary states.
 
 One check per agent: `portability-claude-code`, `portability-codex`,
 `portability-cursor`, `portability-copilot`, `portability-gemini-cli`,
-`portability-aider`, `portability-windsurf`.
+`portability-aider`, `portability-windsurf`, `portability-cline`,
+`portability-kiro`.
 
 Each answers one question: *would this agent find any project instructions in
 this repository?*
@@ -247,10 +258,10 @@ this repository?*
 | --- | --- |
 | The agent loads at least one file | PASS (INFO for an unverified agent) |
 | The repository has no instruction files at all | INFO for every agent -- there is nothing to be portable about |
-| The repository has instructions but this agent loads none, and its behavior is cited | FAIL for Claude Code, Codex, Cursor and Copilot |
+| The repository has instructions but this agent loads none, and its behavior is cited | FAIL for Claude Code, Codex, Cursor, Copilot, Windsurf, Cline and Kiro |
 | ... and the behavior depends on configuration outside the repository | WARN for Gemini CLI |
 | ... and the agent documents loading nothing by default | INFO for aider |
-| ... and the behavior could not be verified | INFO for Windsurf |
+| ... and the behavior could not be verified | INFO (no agent is in this state today) |
 | Only a legacy `.cursorrules` is present | WARN for Cursor, not FAIL: the current Cursor rules doc does not list `.cursorrules`, and agentsdoc will not assert that it is ignored either |
 
 `portability-claude-code` and `portability-codex` carry double weight in the
@@ -494,6 +505,22 @@ Comments in the blocks above are for the reader; real output is plain JSON.
 ---
 
 ## Fixing the common cases
+
+`agentsdoc . --fix` does the safe part for you, at the repository root only, and
+then audits the result (`--fix --dry-run` shows the plan and changes nothing):
+
+- with an `AGENTS.md` and no `CLAUDE.md` (or `.claude/CLAUDE.md`), it creates a
+  `CLAUDE.md` that holds `@AGENTS.md`; the same for a missing `GEMINI.md`, since
+  Gemini CLI also supports `@file.md` imports;
+- a `CLAUDE.md` or `GEMINI.md` that is a copy of `AGENTS.md` (ignoring line
+  endings and trailing spaces) is rewritten to the one-line import;
+- with a `CLAUDE.md` and no `AGENTS.md`, the `CLAUDE.md` text moves into a new
+  `AGENTS.md` and `CLAUDE.md` becomes the import.
+
+It never touches a symlink, a file whose text differs from `AGENTS.md`, or
+anything below the root, and it re-reads each file before rewriting it and
+skips any that changed since the scan. The log goes to stderr, so `--fix --json`
+still prints only the report. The manual recipes:
 
 **AGENTS.md but no CLAUDE.md.** Add a root `CLAUDE.md`:
 

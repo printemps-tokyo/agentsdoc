@@ -46,6 +46,7 @@
 
 pub mod agents;
 pub mod checks;
+pub mod fix;
 pub mod model;
 pub mod report;
 pub mod scan;

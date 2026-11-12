@@ -29,6 +29,10 @@ pub const MAX_IMPORT_FOLLOW: usize = 5;
 pub enum Kind {
     /// `AGENTS.md`, at the root or in any subdirectory.
     AgentsMd,
+    /// `AGENTS.local.md` (personal rules kept out of version control).
+    AgentsLocalMd,
+    /// `AGENT.md` (singular), which Windsurf / Devin Local also reads.
+    AgentMd,
     /// `CLAUDE.md`, at the root or in any subdirectory.
     ClaudeMd,
     /// `.claude/CLAUDE.md`.
@@ -47,10 +51,14 @@ pub enum Kind {
     CopilotPath,
     /// `GEMINI.md`.
     GeminiMd,
-    /// `.windsurfrules` or `.windsurf/rules/**/*.md`.
+    /// `.windsurfrules`, `.windsurf/global_rules.md` or `.windsurf/rules/**/*.md`.
     WindsurfRules,
-    /// `.clinerules`, or `.clinerules/**/*.md`.
+    /// `.devin/global_rules.md` or `.devin/rules/**/*.md`.
+    DevinRules,
+    /// `.clinerules`, `.clinerules/**/*.md` or `.cline/rules/**/*.md`.
     ClineRules,
+    /// `.kiro/steering/**/*.md`.
+    KiroSteering,
     /// `.aider.conf.yml` / `.aider.conf.yaml`.
     AiderConfig,
     /// A root `CONVENTIONS.md`, the file aider's docs use as the example.
@@ -62,6 +70,8 @@ impl Kind {
     pub fn as_str(self) -> &'static str {
         match self {
             Kind::AgentsMd => "agents-md",
+            Kind::AgentsLocalMd => "agents-local-md",
+            Kind::AgentMd => "agent-md",
             Kind::ClaudeMd => "claude-md",
             Kind::ClaudeDirMd => "claude-dir-md",
             Kind::ClaudeLocalMd => "claude-local-md",
@@ -72,7 +82,9 @@ impl Kind {
             Kind::CopilotPath => "copilot-path-instructions",
             Kind::GeminiMd => "gemini-md",
             Kind::WindsurfRules => "windsurf-rules",
+            Kind::DevinRules => "devin-rules",
             Kind::ClineRules => "cline-rules",
+            Kind::KiroSteering => "kiro-steering",
             Kind::AiderConfig => "aider-config",
             Kind::AiderConventions => "aider-conventions",
         }
@@ -108,8 +120,21 @@ impl Kind {
         if segment_prefix(&lower, ".windsurf/rules/") && lower.ends_with(".md") {
             return Some(Kind::WindsurfRules);
         }
-        if segment_prefix(&lower, ".clinerules/") && lower.ends_with(".md") {
+        if lower == ".windsurf/global_rules.md" {
+            return Some(Kind::WindsurfRules);
+        }
+        if (segment_prefix(&lower, ".devin/rules/") && lower.ends_with(".md"))
+            || lower == ".devin/global_rules.md"
+        {
+            return Some(Kind::DevinRules);
+        }
+        if (segment_prefix(&lower, ".clinerules/") || segment_prefix(&lower, ".cline/rules/"))
+            && lower.ends_with(".md")
+        {
             return Some(Kind::ClineRules);
+        }
+        if segment_prefix(&lower, ".kiro/steering/") && lower.ends_with(".md") {
+            return Some(Kind::KiroSteering);
         }
         if lower == ".github/copilot-instructions.md" {
             return Some(Kind::CopilotRepo);
@@ -117,6 +142,8 @@ impl Kind {
 
         match base {
             "agents.md" => Some(Kind::AgentsMd),
+            "agents.local.md" => Some(Kind::AgentsLocalMd),
+            "agent.md" => Some(Kind::AgentMd),
             "claude.md" if dir.ends_with(".claude") => Some(Kind::ClaudeDirMd),
             "claude.md" => Some(Kind::ClaudeMd),
             "claude.local.md" => Some(Kind::ClaudeLocalMd),

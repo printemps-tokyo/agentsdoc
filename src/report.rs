@@ -459,7 +459,7 @@ mod tests {
         assert_eq!(a, render_json(&r));
         assert!(a.starts_with("{\n  \"tool\": \"agentsdoc\","));
         assert!(a.contains("\"caveat\":"));
-        assert!(a.contains("\"sources_read\": \"2026-07-29\""));
+        assert!(a.contains("\"sources_read\": \"2026-11-12\""));
         assert_eq!(a.matches('"').count() % 2, 0);
     }
 

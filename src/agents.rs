@@ -134,15 +134,48 @@ pub const AGENTS: &[Agent] = &[
     Agent {
         id: "windsurf",
         check_id: "portability-windsurf",
-        name: "Windsurf",
-        verified: false,
-        source: "unverified - agentsdoc found no official Windsurf documentation it could cite on \
-                 2026-07-29. Check your tool's current docs.",
-        behavior: "commonly documented in the wild as reading .windsurfrules or \
-                   .windsurf/rules/*.md; agentsdoc does not assert this",
-        missing: Severity::Info,
-        fix: "Verify against the current Windsurf documentation before adding or removing files \
-              on agentsdoc's account.",
+        name: "Windsurf (Devin Local)",
+        verified: true,
+        source: "https://docs.devin.ai/desktop/devin-local/customizations (where \
+                 docs.windsurf.com/windsurf/cascade/memories redirects; read 2026-11-12): \
+                 \"AGENTS.md, AGENTS.local.md (...), and AGENT.md are all read as always-on \
+                 rules\" at the workspace root and in each directory down to the working one; \
+                 rule files go in .devin/rules/*.md; \"The legacy .windsurf/rules/*.md, \
+                 .windsurf/global_rules.md, and .windsurfrules files are imported by default.\"",
+        behavior: "loads AGENTS.md / AGENTS.local.md / AGENT.md from the root down to the working \
+                   directory, .devin/global_rules.md, .devin/rules/*.md, and the legacy \
+                   .windsurf/ rules and .windsurfrules",
+        missing: Severity::Fail,
+        fix: "Add an AGENTS.md at the repository root; Windsurf reads it as an always-on rule.",
+    },
+    Agent {
+        id: "cline",
+        check_id: "portability-cline",
+        name: "Cline",
+        verified: true,
+        source: "https://docs.cline.bot/customization/cline-rules (read 2026-11-12): \
+                 \"Workspace rules go in .clinerules/ or .cline/rules/ at your project root\", \
+                 and Cline also detects .cursorrules, .windsurfrules and AGENTS.md; \"All \
+                 detected rule types appear in the Rules panel, where you can toggle them \
+                 individually.\"",
+        behavior: "loads .clinerules/ and .cline/rules/, plus a root .cursorrules, .windsurfrules \
+                   and AGENTS.md; each can be toggled off in the Rules panel",
+        missing: Severity::Fail,
+        fix: "Add an AGENTS.md at the repository root, or rules under .clinerules/.",
+    },
+    Agent {
+        id: "kiro",
+        check_id: "portability-kiro",
+        name: "Kiro",
+        verified: true,
+        source: "https://kiro.dev/docs/steering/ (read 2026-11-12): workspace steering lives in \
+                 .kiro/steering/ with `inclusion: always` as the default; \"AGENTS.md files do \
+                 not support inclusion modes and are always included\" from the workspace root, \
+                 and are \"also discovered in subdirectories\".",
+        behavior: "loads .kiro/steering/*.md (by inclusion mode, always by default) and AGENTS.md \
+                   at the root and in subdirectories",
+        missing: Severity::Fail,
+        fix: "Add an AGENTS.md at the repository root, or steering files under .kiro/steering/.",
     },
 ];
 
@@ -177,9 +210,53 @@ pub fn loads(agent_id: &str, file: &InstructionFile) -> bool {
         // aider is handled by `aider_reads`, because what it loads is decided
         // by .aider.conf.yml rather than by the file's name.
         "aider" => false,
-        "windsurf" => file.kind == Kind::WindsurfRules,
+        "windsurf" => matches!(
+            file.kind,
+            Kind::AgentsMd
+                | Kind::AgentsLocalMd
+                | Kind::AgentMd
+                | Kind::DevinRules
+                | Kind::WindsurfRules
+        ),
+        // The Cline doc names root locations only: .clinerules/ and
+        // .cline/rules/ "at your project root", and the other tools' files.
+        "cline" => {
+            at_root_tree(file, &[".clinerules", ".cline/rules"])
+                || (at_root
+                    && matches!(
+                        file.kind,
+                        Kind::AgentsMd | Kind::CursorLegacy | Kind::WindsurfRules
+                    )
+                    && !file.path.contains('/'))
+        }
+        "kiro" => matches!(file.kind, Kind::KiroSteering | Kind::AgentsMd),
         _ => false,
     }
+}
+
+/// Whether `file` is `.clinerules` itself or lives under one of the given
+/// root-level directories.
+fn at_root_tree(file: &InstructionFile, roots: &[&str]) -> bool {
+    if file.kind != Kind::ClineRules {
+        return false;
+    }
+    let lower = file.path.to_ascii_lowercase();
+    lower == ".clinerules" || roots.iter().any(|r| lower.starts_with(&format!("{r}/")))
+}
+
+/// The value of a top-level `key:` in a file's frontmatter, lowercased.
+pub fn frontmatter_value(text: &str, key: &str) -> Option<String> {
+    let fm = frontmatter(text)?;
+    fm.lines().find_map(|l| {
+        let t = l.trim();
+        let (k, v) = t.split_once(':')?;
+        (k.trim().eq_ignore_ascii_case(key)).then(|| {
+            v.trim()
+                .trim_matches('"')
+                .trim_matches('\'')
+                .to_ascii_lowercase()
+        })
+    })
 }
 
 /// Files `agent_id` would load, sorted by path.
@@ -425,6 +502,81 @@ pub fn effective(a: &'static Agent, ws: &Workspace, dir: &str) -> Effective {
                      names it."
                         .to_string(),
                 );
+            }
+        }
+        "windsurf" => {
+            notes.push(
+                "AGENTS.md, AGENTS.local.md and AGENT.md are read at the root and in each \
+                 directory down to the working one (docs.devin.ai, Devin Local customizations)."
+                    .to_string(),
+            );
+            let mut chain = crate::scan::ancestors(dir);
+            chain.reverse();
+            for cursor in chain {
+                for kind in [Kind::AgentsMd, Kind::AgentsLocalMd, Kind::AgentMd] {
+                    if let Some(f) = ws.of_kind(kind).find(|f| f.dir() == cursor) {
+                        push_with_imports(&mut layers, ws, f, "always-on rule", false);
+                    }
+                }
+            }
+            let devin_global = ws.file(".devin/global_rules.md").is_some();
+            for f in ws
+                .of_kind(Kind::DevinRules)
+                .chain(ws.of_kind(Kind::WindsurfRules))
+            {
+                let lower = f.path.to_ascii_lowercase();
+                if lower.ends_with("global_rules.md") || lower == ".windsurfrules" {
+                    if lower == ".windsurf/global_rules.md" && devin_global {
+                        notes.push(
+                            ".windsurf/global_rules.md is skipped: \"when both global_rules.md \
+                             files exist, only .devin/global_rules.md loads\"."
+                                .to_string(),
+                        );
+                        continue;
+                    }
+                    push_with_imports(&mut layers, ws, f, "always-on", false);
+                    continue;
+                }
+                let (why, conditional) = match frontmatter_value(f.body(), "trigger").as_deref() {
+                    Some("always_on") => ("rule, trigger always_on", false),
+                    Some("glob") => ("rule, trigger glob (loads for matching files)", true),
+                    Some("model_decision") => ("rule, trigger model_decision", true),
+                    Some("manual") => ("rule, trigger manual (only when invoked)", true),
+                    _ => (
+                        "rule without a trigger the doc defines (its default is not documented)",
+                        true,
+                    ),
+                };
+                push_with_imports(&mut layers, ws, f, why, conditional);
+            }
+        }
+        "cline" => {
+            notes.push(
+                "Every detected rule file can be toggled off in Cline's Rules panel, so this is \
+                 what loads with all toggles on."
+                    .to_string(),
+            );
+            for f in coverage("cline", ws) {
+                push_with_imports(&mut layers, ws, f, "workspace rule", false);
+            }
+        }
+        "kiro" => {
+            for f in ws.of_kind(Kind::KiroSteering) {
+                let (why, conditional) = match frontmatter_value(f.body(), "inclusion").as_deref() {
+                    None | Some("always") => ("steering, inclusion always (the default)", false),
+                    Some("filematch") => ("steering, inclusion fileMatch", true),
+                    Some("manual") => ("steering, inclusion manual", true),
+                    Some(_) => ("steering, inclusion mode not in the doc", true),
+                };
+                push_with_imports(&mut layers, ws, f, why, conditional);
+            }
+            for f in ws.of_kind(Kind::AgentsMd) {
+                let why = if f.dir().is_empty() {
+                    "AGENTS.md at the workspace root (always included)"
+                } else {
+                    "AGENTS.md in a subdirectory (discovered; the doc does not say when it loads)"
+                };
+                push_with_imports(&mut layers, ws, f, why, !f.dir().is_empty());
             }
         }
         "aider" => {

@@ -303,3 +303,68 @@ fn help_and_version_work() {
         .unwrap()
         .contains(env!("CARGO_PKG_VERSION")));
 }
+
+#[test]
+fn fix_syncs_the_other_tools_to_agents_md_and_dry_run_changes_nothing() {
+    let dir = fixture(&[
+        (
+            "AGENTS.md",
+            "# rules\n\nRun `cargo test` before committing.\n",
+        ),
+        (
+            "GEMINI.md",
+            "# rules\n\nRun `cargo test` before committing.\n",
+        ),
+    ]);
+
+    let dry = run(dir.path(), &["--fix", "--dry-run", "--quiet"]);
+    let log = String::from_utf8(dry.stderr.clone()).unwrap();
+    assert!(log.contains("would create CLAUDE.md"), "{log}");
+    assert!(log.contains("would rewrite GEMINI.md"), "{log}");
+    assert!(!dir.path().join("CLAUDE.md").exists());
+
+    let fixed = run(dir.path(), &["--fix", "--json"]);
+    assert_eq!(
+        fixed.status.code(),
+        Some(0),
+        "{}",
+        String::from_utf8_lossy(&fixed.stdout)
+    );
+    assert_eq!(
+        fs::read_to_string(dir.path().join("CLAUDE.md")).unwrap(),
+        "@AGENTS.md\n"
+    );
+    assert_eq!(
+        fs::read_to_string(dir.path().join("GEMINI.md")).unwrap(),
+        "@AGENTS.md\n"
+    );
+    // The report on stdout is the audit after the fix.
+    let doc = String::from_utf8(fixed.stdout).unwrap();
+    assert!(doc.trim_start().starts_with('{'));
+
+    let again = run(dir.path(), &["--fix", "--quiet"]);
+    assert!(String::from_utf8_lossy(&again.stderr).contains("nothing to change"));
+
+    let refused = run(dir.path(), &["--dry-run"]);
+    assert_eq!(refused.status.code(), Some(2), "--dry-run needs --fix");
+}
+
+#[test]
+fn fix_moves_a_lone_claude_md_into_agents_md() {
+    let dir = fixture(&[("CLAUDE.md", "# rules\n\nUse pnpm.\n")]);
+    let out = run(dir.path(), &["--fix", "--quiet"]);
+    assert_eq!(
+        out.status.code(),
+        Some(0),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert_eq!(
+        fs::read_to_string(dir.path().join("AGENTS.md")).unwrap(),
+        "# rules\n\nUse pnpm.\n"
+    );
+    assert_eq!(
+        fs::read_to_string(dir.path().join("CLAUDE.md")).unwrap(),
+        "@AGENTS.md\n"
+    );
+}

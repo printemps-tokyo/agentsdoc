@@ -183,13 +183,64 @@ mod tests {
 
     #[test]
     fn an_unverified_agent_never_exceeds_info() {
+        // Every shipped agent is verified today; the guard still has to hold
+        // for the next one that cannot be.
+        let unverified: &'static agents::Agent = Box::leak(Box::new(agents::Agent {
+            verified: false,
+            ..*agents::agent("windsurf").unwrap()
+        }));
         let present = Workspace::from_entries("x", [(".windsurfrules", "# rules\n")]);
-        let f = run("windsurf", &present);
+        let f = for_agent(unverified, &present);
         assert_eq!(f.severity, Severity::Info);
         assert!(f.title.contains("unverified"));
 
-        let absent = Workspace::from_entries("x", [("AGENTS.md", "# rules\n")]);
-        assert_eq!(run("windsurf", &absent).severity, Severity::Info);
+        let absent = Workspace::from_entries("x", [("CLAUDE.md", "# rules\n")]);
+        assert_eq!(for_agent(unverified, &absent).severity, Severity::Info);
+    }
+
+    #[test]
+    fn windsurf_reads_agents_md_and_its_rule_folders() {
+        for files in [
+            vec![("AGENTS.md", "# rules\n")],
+            vec![("AGENT.md", "# rules\n")],
+            vec![(".windsurfrules", "# rules\n")],
+            vec![(".devin/rules/style.md", "# rules\n")],
+            vec![(".windsurf/global_rules.md", "# rules\n")],
+        ] {
+            let ws = Workspace::from_entries("x", files.clone());
+            assert_eq!(run("windsurf", &ws).severity, Severity::Pass, "{files:?}");
+        }
+        let claude_only = Workspace::from_entries("x", [("CLAUDE.md", "# rules\n")]);
+        assert_eq!(run("windsurf", &claude_only).severity, Severity::Fail);
+    }
+
+    #[test]
+    fn cline_reads_root_rules_and_other_tools_files() {
+        for files in [
+            vec![(".clinerules/style.md", "# rules\n")],
+            vec![(".cline/rules/style.md", "# rules\n")],
+            vec![(".clinerules", "# rules\n")],
+            vec![("AGENTS.md", "# rules\n")],
+            vec![(".cursorrules", "# rules\n")],
+        ] {
+            let ws = Workspace::from_entries("x", files.clone());
+            assert_eq!(run("cline", &ws).severity, Severity::Pass, "{files:?}");
+        }
+        // Only root locations are documented.
+        let nested = Workspace::from_entries("x", [("api/AGENTS.md", "# rules\n")]);
+        assert_eq!(run("cline", &nested).severity, Severity::Fail);
+        let claude_only = Workspace::from_entries("x", [("CLAUDE.md", "# rules\n")]);
+        assert_eq!(run("cline", &claude_only).severity, Severity::Fail);
+    }
+
+    #[test]
+    fn kiro_reads_steering_and_agents_md() {
+        let steering = Workspace::from_entries("x", [(".kiro/steering/tech.md", "# rules\n")]);
+        assert_eq!(run("kiro", &steering).severity, Severity::Pass);
+        let agents = Workspace::from_entries("x", [("pkg/AGENTS.md", "# rules\n")]);
+        assert_eq!(run("kiro", &agents).severity, Severity::Pass);
+        let claude_only = Workspace::from_entries("x", [("CLAUDE.md", "# rules\n")]);
+        assert_eq!(run("kiro", &claude_only).severity, Severity::Fail);
     }
 
     #[test]
